@@ -11,6 +11,7 @@ from app.services.bkt_engine import BKTEngine
 from jose import JWTError, jwt
 from app.config import SECRET_KEY, ALGORITHM
 
+# Создаем router
 router = APIRouter(prefix="/tests", tags=["tests"])
 templates = Jinja2Templates(directory="app/templates")
 
@@ -85,6 +86,7 @@ async def create_test(
     try:
         # Получаем данные из тела запроса
         data = await request.json()
+        print(f"📥 Создание теста: {data}")
         
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username = payload.get("sub")
@@ -107,6 +109,8 @@ async def create_test(
         
         # Создаем задания
         items = data.get("items", [])
+        print(f"📋 Задания: {items}")
+        
         for idx, skill_id in enumerate(items, 1):
             test_item = TestItem(
                 test_id=test.id,
@@ -116,10 +120,15 @@ async def create_test(
             db.add(test_item)
         
         db.commit()
+        print(f"✅ Тест создан с ID: {test.id}")
         
         return {"test_id": test.id, "message": "Test created successfully"}
     except JWTError:
+        print("❌ Ошибка JWT токена")
         raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        print(f"❌ Ошибка: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/api/save-results")
 async def save_test_results(
@@ -134,7 +143,9 @@ async def save_test_results(
     token = auth_header.replace("Bearer ", "")
     
     try:
+        # Получаем данные
         data = await request.json()
+        print(f"📥 Получены данные для сохранения: {data}")
         
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username = payload.get("sub")
@@ -146,14 +157,34 @@ async def save_test_results(
         if current_user.role == "guest":
             raise HTTPException(status_code=403, detail="Guests cannot save results")
         
+        # Проверяем test_id
+        test_id = data.get("test_id")
+        if not test_id:
+            print("❌ Нет test_id в данных")
+            raise HTTPException(status_code=400, detail="Missing test_id")
+        
         # Получаем все задания теста
-        test_items = db.query(TestItem).filter(TestItem.test_id == data["test_id"]).all()
+        test_items = db.query(TestItem).filter(TestItem.test_id == test_id).all()
+        print(f"📋 Найдено заданий в тесте: {len(test_items)}")
+        
+        if not test_items:
+            print(f"❌ Тест {test_id} не имеет заданий")
+            raise HTTPException(status_code=404, detail="Test has no items")
+        
         test_items_dict = {item.item_order: item for item in test_items}
+        print(f"📋 Задания: {test_items_dict}")
         
         # Сохраняем результаты
-        for student_id, student_results in data["results"].items():
+        results = data.get("results", {})
+        print(f"📋 Результаты учеников: {results}")
+        
+        attempts_count = 0
+        for student_id, student_results in results.items():
+            print(f"👤 Обработка ученика {student_id}")
             for item_idx, is_correct in student_results.items():
                 item_idx_int = int(item_idx)
+                print(f"  Задание {item_idx_int}: правильно={is_correct}")
+                
                 if item_idx_int in test_items_dict:
                     attempt = StudentAttempt(
                         student_id=int(student_id),
@@ -162,20 +193,31 @@ async def save_test_results(
                         score=1.0 if is_correct else 0.0
                     )
                     db.add(attempt)
+                    attempts_count += 1
+                else:
+                    print(f"  ⚠️ Задание {item_idx_int} не найдено в тесте")
         
+        print(f"💾 Сохраняем {attempts_count} попыток в БД")
         db.commit()
+        print("✅ Данные сохранены в БД")
         
         # Запускаем BKT обновление
+        print("🔄 Запускаем BKT обновление...")
         bkt = BKTEngine(db)
-        updated_count = bkt.process_test_results(data["test_id"])
+        updated_count = bkt.process_test_results(test_id)
+        print(f"✅ BKT обновлено {updated_count} записей")
         
         return {
             "message": f"Results saved successfully. BKT updated {updated_count} records.",
             "updated_count": updated_count
         }
     except JWTError:
+        print("❌ Ошибка JWT токена")
         raise HTTPException(status_code=401, detail="Invalid token")
     except Exception as e:
+        print(f"❌ Неожиданная ошибка: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/api/list")
