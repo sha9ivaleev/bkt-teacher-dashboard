@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BKT Teacher Dashboard - Вход</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    <style>
+        body {
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .login-form {
+            width: 100%;
+            max-width: 400px;
+            padding: 40px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        .login-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .login-header i {
+            font-size: 60px;
+            color: #667eea;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .login-header h2 {
+            margin-top: 15px;
+            color: #333;
+            font-weight: 600;
+        }
+        .login-header p {
+            color: #666;
+            font-size: 0.9em;
+        }
+        .alert {
+            display: none;
+            margin-bottom: 20px;
+        }
+        .test-credentials {
+            margin-top: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 10px;
+            font-size: 0.95em;
+        }
+        .test-credentials h6 {
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+        .cred-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 8px;
+            background: rgba(255,255,255,0.7);
+            border-radius: 8px;
+        }
+        .cred-item i {
+            margin-right: 10px;
+            color: #667eea;
+        }
+        .cred-item strong {
+            margin-right: 5px;
+            color: #333;
+        }
+        .btn-login {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            padding: 12px;
+            font-weight: 600;
+            transition: transform 0.2s;
+        }
+        .btn-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        .form-control:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+    </style>
+</head>
+<body>
+    <div class="login-form">
+        <div class="login-header">
+            <i class="bi bi-graph-up-arrow"></i>
+            <h2>BKT Teacher Dashboard</h2>
+            <p class="text-muted">Введите ваши учетные данные</p>
+        </div>
+        
+        <div class="alert alert-danger" id="errorAlert" role="alert"></div>
+        <div class="alert alert-success" id="successAlert" role="alert"></div>
+        
+        <form id="loginForm">
+            <div class="mb-4">
+                <label for="username" class="form-label">Имя пользователя</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-person"></i></span>
+                    <input type="text" class="form-control" id="username" name="username" 
+                           placeholder="teacher или guest" required autocomplete="off">
+                </div>
+            </div>
+            <div class="mb-4">
+                <label for="password" class="form-label">Пароль</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                    <input type="password" class="form-control" id="password" name="password" 
+                           placeholder="••••••••" required>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-login w-100">
+                <i class="bi bi-box-arrow-in-right"></i> Войти
+            </button>
+        </form>
+        
+        <div class="test-credentials">
+            <h6><i class="bi bi-info-circle"></i> Тестовые учетные записи:</h6>
+            <div class="cred-item">
+                <i class="bi bi-person-badge"></i>
+                <div>
+                    <strong>Учитель:</strong> teacher / teacher123
+                    <br><small class="text-muted">(полный доступ)</small>
+                </div>
+            </div>
+            <div class="cred-item">
+                <i class="bi bi-person"></i>
+                <div>
+                    <strong>Гость:</strong> guest / guest123
+                    <br><small class="text-muted">(только просмотр)</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // Показываем индикатор загрузки
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Вход...';
+            submitBtn.disabled = true;
+            
+            // Скрываем предыдущие сообщения
+            document.getElementById('errorAlert').style.display = 'none';
+            document.getElementById('successAlert').style.display = 'none';
+            
+            const formData = new FormData(this);
+            const data = {
+                username: formData.get('username'),
+                password: formData.get('password')
+            };
+            
+            console.log('Attempting login with:', data.username);
+            
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'Accept': 'application/json'
+                    },
+                    body: new URLSearchParams({
+                        'username': data.username,
+                        'password': data.password
+                    })
+                });
+                
+                const result = await response.json();
+                console.log('Login response:', response.status, result);
+                
+                if (response.ok) {
+                    // Сохраняем токен
+                    localStorage.setItem('token', result.access_token);
+                    localStorage.setItem('role', result.role);
+                    
+                    // Показываем успех
+                    document.getElementById('successAlert').textContent = 'Вход выполнен успешно! Перенаправление...';
+                    document.getElementById('successAlert').style.display = 'block';
+                    
+                    // Перенаправляем на главную
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 1000);
+                } else {
+                    // Показываем ошибку
+                    document.getElementById('errorAlert').textContent = result.detail || 'Неверное имя пользователя или пароль';
+                    document.getElementById('errorAlert').style.display = 'block';
+                    
+                    // Возвращаем кнопку в исходное состояние
+                    submitBtn.innerHTML = originalText;
+                    submitBtn.disabled = false;
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                document.getElementById('errorAlert').textContent = 'Ошибка подключения к серверу: ' + error.message;
+                document.getElementById('errorAlert').style.display = 'block';
+                
+                // Возвращаем кнопку в исходное состояние
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            }
+        });
+
+        // Автоматически заполняем тестовые данные (для удобства)
+        document.addEventListener('DOMContentLoaded', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const testUser = urlParams.get('test');
+            
+            if (testUser === 'teacher') {
+                document.getElementById('username').value = 'teacher';
+                document.getElementById('password').value = 'teacher123';
+            } else if (testUser === 'guest') {
+                document.getElementById('username').value = 'guest';
+                document.getElementById('password').value = 'guest123';
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ввод тестов</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .header {
+            background: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-primary {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .btn-success {
+            background-color: #28a745;
+            color: white;
+        }
+        .btn-back {
+            background-color: #6c757d;
+            color: white;
+            text-decoration: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .test-items {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        .test-item {
+            margin: 10px 0;
+            padding: 10px;
+            background: white;
+            border-radius: 4px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        select, input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 10px;
+            text-align: center;
+            border: 1px solid #ddd;
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .checkbox-cell {
+            text-align: center;
+        }
+        .checkbox-cell input {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2>Ввод результатов теста</h2>
+        <button onclick="goBack()" class="btn-back">← Назад</button>
+    </div>
+    
+    <div class="content">
+        <div class="form-group">
+            <label>Описание теста:</label>
+            <input type="text" id="testDesc" placeholder="Например: Контрольная работа по математике" style="width: 300px;">
+        </div>
+        
+        <div class="test-items">
+            <h3>Задания в тесте</h3>
+            <button onclick="addTestItem()" class="btn btn-primary">+ Добавить задание</button>
+            <div id="testItemsList"></div>
+        </div>
+        
+        <div id="resultsTable" style="display: none;">
+            <h3>Результаты учеников</h3>
+            <table>
+                <thead>
+                    <tr id="resultsHeader">
+                        <th>Ученик</th>
+                    </tr>
+                </thead>
+                <tbody id="resultsBody"></tbody>
+            </table>
+            
+            <button onclick="saveResults()" class="btn btn-success" style="margin-top: 20px;">Сохранить результаты</button>
+        </div>
+    </div>
+    
+    <script>
+        function getToken() {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get('token') || localStorage.getItem('token');
+        }
+        
+        function goBack() {
+            const token = getToken();
+            window.location.href = '/dashboard?token=' + token;
+        }
+        
+        const token = getToken();
+        if (!token) {
+            window.location.href = '/';
+        }
+        
+        let students = [];
+        let skills = [];
+        let testItems = [];
+        
+        // Загружаем учеников и навыки
+        async function loadData() {
+            try {
+                const studentsRes = await fetch('/students/api', {
+                    headers: {'Authorization': `Bearer ${token}`}
+                });
+                students = await studentsRes.json();
+                
+                const skillsRes = await fetch('/skills/api', {
+                    headers: {'Authorization': `Bearer ${token}`}
+                });
+                skills = await skillsRes.json();
+                
+                // Отображаем список заданий
+                updateTestItemsList();
+                
+            } catch (error) {
+                console.error('Ошибка загрузки данных:', error);
+            }
+        }
+        
+        function updateTestItemsList() {
+            const list = document.getElementById('testItemsList');
+            list.innerHTML = '';
+            
+            testItems.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = 'test-item';
+                div.innerHTML = `
+                    <span>Задание ${index + 1}:</span>
+                    <select onchange="updateTestItem(${index}, this.value)">
+                        <option value="">Выберите навык</option>
+                        ${skills.map(s => `<option value="${s.id}" ${s.id == item.skill ? 'selected' : ''}>${s.name}</option>`).join('')}
+                    </select>
+                    <button onclick="removeTestItem(${index})" class="btn" style="background-color: #dc3545; color: white;">Удалить</button>
+                `;
+                list.appendChild(div);
+            });
+            
+            // Обновляем таблицу результатов
+            updateResultsTable();
+        }
+        
+        function addTestItem() {
+            testItems.push({skill: ''});
+            updateTestItemsList();
+        }
+        
+        function updateTestItem(index, skillId) {
+            testItems[index].skill = skillId;
+            updateResultsTable();
+        }
+        
+        function removeTestItem(index) {
+            testItems.splice(index, 1);
+            updateTestItemsList();
+        }
+        
+        function updateResultsTable() {
+            // Проверяем, все ли задания имеют выбранный навык
+            const allSkillsSelected = testItems.length > 0 && testItems.every(item => item.skill);
+            
+            if (!allSkillsSelected) {
+                document.getElementById('resultsTable').style.display = 'none';
+                return;
+            }
+            
+            document.getElementById('resultsTable').style.display = 'block';
+            
+            // Формируем заголовок таблицы
+            let headerHtml = '<th>Ученик</th>';
+            testItems.forEach((item, index) => {
+                const skill = skills.find(s => s.id == item.skill);
+                headerHtml += `<th>Задание ${index + 1}<br><small>${skill ? skill.name : ''}</small></th>`;
+            });
+            document.getElementById('resultsHeader').innerHTML = headerHtml;
+            
+            // Формируем тело таблицы
+            let bodyHtml = '';
+            students.forEach(student => {
+                bodyHtml += '<tr>';
+                bodyHtml += `<td><strong>${student.name}</strong></td>`;
+                
+                testItems.forEach((item, index) => {
+                    bodyHtml += `
+                        <td class="checkbox-cell">
+                            <input type="checkbox" id="result_${student.id}_${index}" checked>
+                        </td>
+                    `;
+                });
+                
+                bodyHtml += '</tr>';
+            });
+            
+            document.getElementById('resultsBody').innerHTML = bodyHtml;
+        }
+        
+        async function saveResults() {
+            // Сначала создаем тест
+            const testData = {
+                description: document.getElementById('testDesc').value,
+                items: testItems.map(item => item.skill)
+            };
+            
+            try {
+                // Создаем тест
+                const createResponse = await fetch('/tests/api/create', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(testData)
+                });
+                
+                if (!createResponse.ok) {
+                    throw new Error('Ошибка создания теста');
+                }
+                
+                const { test_id } = await createResponse.json();
+                
+                // Собираем результаты
+                const results = {};
+                students.forEach(student => {
+                    results[student.id] = {};
+                    testItems.forEach((item, index) => {
+                        const checkbox = document.getElementById(`result_${student.id}_${index}`);
+                        results[student.id][index + 1] = checkbox ? checkbox.checked : false;
+                    });
+                });
+                
+                // Сохраняем результаты
+                const saveResponse = await fetch('/tests/api/save-results', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        test_id: test_id,
+                        results: results
+                    })
+                });
+                
+                if (saveResponse.ok) {
+                    alert('Результаты успешно сохранены!');
+                    // Очищаем форму
+                    document.getElementById('testDesc').value = '';
+                    testItems = [];
+                    updateTestItemsList();
+                    document.getElementById('resultsTable').style.display = 'none';
+                } else {
+                    alert('Ошибка при сохранении результатов');
+                }
+                
+            } catch (error) {
+                console.error('Ошибка:', error);
+                alert('Ошибка при сохранении');
+            }
+        }
+        
+        // Загружаем данные при старте
+        loadData();
+    </script>
+</body>
+</html>

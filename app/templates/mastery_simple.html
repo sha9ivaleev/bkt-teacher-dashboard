@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Таблица освоения</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .header {
+            background: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 10px;
+            text-align: center;
+            border: 1px solid #ddd;
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
+            position: sticky;
+            top: 0;
+        }
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        .mastery-high {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .mastery-medium {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .mastery-low {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .btn-back {
+            background-color: #6c757d;
+            color: white;
+            text-decoration: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2>Таблица освоения навыков</h2>
+        <button onclick="goBack()" class="btn-back">← Назад</button>
+    </div>
+    
+    <div class="content">
+        <table id="masteryTable">
+            <thead id="tableHeader">
+                <tr>
+                    <th>Ученик</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                <tr>
+                    <td colspan="2">Загрузка...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    
+    <script>
+        function getToken() {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get('token') || localStorage.getItem('token');
+        }
+        
+        function goBack() {
+            const token = getToken();
+            window.location.href = '/dashboard?token=' + token;
+        }
+        
+        const token = getToken();
+        if (!token) {
+            window.location.href = '/';
+        }
+        
+        async function loadMasteryTable() {
+            try {
+                const response = await fetch('/students/api/mastery', {
+                    headers: {'Authorization': `Bearer ${token}`}
+                });
+                const data = await response.json();
+                
+                // Строим заголовок таблицы
+                let headerHtml = '<tr><th>Ученик</th>';
+                data.skills.forEach(skill => {
+                    headerHtml += `<th>${skill.name}</th>`;
+                });
+                headerHtml += '</tr>';
+                document.getElementById('tableHeader').innerHTML = headerHtml;
+                
+                // Строим тело таблицы
+                let bodyHtml = '';
+                data.matrix.forEach(row => {
+                    bodyHtml += '<tr>';
+                    bodyHtml += `<td><strong>${row.student_name}</strong></td>`;
+                    
+                    data.skills.forEach(skill => {
+                        const mastery = row.mastery[skill.id]?.percentage || 0;
+                        let className = '';
+                        if (mastery >= 70) className = 'mastery-high';
+                        else if (mastery >= 40) className = 'mastery-medium';
+                        else if (mastery > 0) className = 'mastery-low';
+                        
+                        bodyHtml += `<td class="${className}">${mastery}%</td>`;
+                    });
+                    
+                    bodyHtml += '</tr>';
+                });
+                
+                document.getElementById('tableBody').innerHTML = bodyHtml;
+                
+            } catch (error) {
+                console.error('Ошибка загрузки:', error);
+                document.getElementById('tableBody').innerHTML = 
+                    '<tr><td colspan="10">Ошибка загрузки данных</td></tr>';
+            }
+        }
+        
+        loadMasteryTable();
+    </script>
+</body>
+</html>

@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block title %}Дашборд{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>Дашборд</h1>
+        <p class="text-muted">Добро пожаловать в систему отслеживания знаний учеников!</p>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card text-white bg-primary">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title">Ученики</h6>
+                        <h2 class="mb-0" id="totalStudents">0</h2>
+                    </div>
+                    <i class="bi bi-people fs-1"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card text-white bg-success">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title">Навыки</h6>
+                        <h2 class="mb-0" id="totalSkills">0</h2>
+                    </div>
+                    <i class="bi bi-lightbulb fs-1"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card text-white bg-info">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title">Тесты</h6>
+                        <h2 class="mb-0" id="totalTests">0</h2>
+                    </div>
+                    <i class="bi bi-pencil fs-1"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Последние тесты</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Дата</th>
+                                <th>Описание</th>
+                                <th>Заданий</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recentTests">
+                            <tr>
+                                <td colspan="3" class="text-center">Загрузка...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Быстрые действия</h5>
+            </div>
+            <div class="card-body">
+                {% if user.role != 'guest' %}
+                <a href="/tests/input" class="btn btn-primary mb-2 w-100">
+                    <i class="bi bi-pencil-square"></i> Ввести результаты теста
+                </a>
+                {% endif %}
+                <a href="/students/mastery" class="btn btn-success mb-2 w-100">
+                    <i class="bi bi-table"></i> Посмотреть таблицу освоения
+                </a>
+                <a href="/students/" class="btn btn-info mb-2 w-100">
+                    <i class="bi bi-people"></i> Управление учениками
+                </a>
+                <a href="/skills/" class="btn btn-warning mb-2 w-100">
+                    <i class="bi bi-lightbulb"></i> Управление навыками
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    async function loadDashboardData() {
+        const token = localStorage.getItem('token');
+        
+        try {
+            // Загружаем учеников
+            const studentsRes = await fetch('/students/api', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            const students = await studentsRes.json();
+            document.getElementById('totalStudents').textContent = students.length;
+            
+            // Загружаем навыки
+            const skillsRes = await fetch('/skills/api', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            const skills = await skillsRes.json();
+            document.getElementById('totalSkills').textContent = skills.length;
+            
+            // Загружаем тесты
+            const testsRes = await fetch('/tests/api/list', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            const tests = await testsRes.json();
+            document.getElementById('totalTests').textContent = tests.length;
+            
+            // Показываем последние тесты
+            const recentTests = tests.slice(0, 5);
+            const tbody = document.getElementById('recentTests');
+            
+            if (recentTests.length > 0) {
+                tbody.innerHTML = recentTests.map(test => `
+                    <tr>
+                        <td>${new Date(test.test_date).toLocaleDateString()}</td>
+                        <td>${test.description || '—'}</td>
+                        <td>${test.items_count}</td>
+                    </tr>
+                `).join('');
+            } else {
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center">Нет тестов</td></tr>';
+            }
+        } catch (error) {
+            console.error('Error loading dashboard data:', error);
+        }
+    }
+    
+    loadDashboardData();
+</script>
+{% endblock %}
