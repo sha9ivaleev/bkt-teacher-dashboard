@@ -1,14 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse  # Добавлен RedirectResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from typing import List
-from app import auth
+from typing import List, Optional
 from app.database import get_db
 from app.models.db_models import Student, User
 from app.schemas.pydantic_models import StudentCreate, StudentResponse
 from app.services.bkt_engine import BKTEngine
-from jose import JWTError, jwt
+from app.deps import AuthDeps
+from app.logger import logger
+from jose import jwt
 from app.config import SECRET_KEY, ALGORITHM
 
 router = APIRouter(prefix="/students", tags=["students"])
@@ -20,40 +21,38 @@ async def students_page(
     token: str = None,
     db: Session = Depends(get_db)
 ):
-    """Страница со списком учеников"""
-    # Проверяем токен
-    if token:
-        access_token = token
-    else:
-        auth_header = request.headers.get("authorization", "")
-        if auth_header.startswith("Bearer "):
-            access_token = auth_header.replace("Bearer ", "")
-        else:
-            access_token = request.cookies.get("access_token")
-    
-    if not access_token:
-        return RedirectResponse(url="/")
-    
     try:
-        # Проверяем токен
+        if token:
+            access_token = token
+        else:
+            auth_header = request.headers.get("authorization", "")
+            if auth_header.startswith("Bearer "):
+                access_token = auth_header.replace("Bearer ", "")
+            else:
+                access_token = request.cookies.get("access_token")
+        
+        if not access_token:
+            return RedirectResponse(url="/")
+        
         payload = jwt.decode(access_token, SECRET_KEY, algorithms=[ALGORITHM])
         username = payload.get("sub")
         
         if not username:
             return RedirectResponse(url="/")
         
-        # Получаем пользователя
         user = db.query(User).filter(User.username == username).first()
         if not user:
             return RedirectResponse(url="/")
         
-        # Отдаем простой шаблон
+        students = db.query(Student).order_by(Student.name).all()
+        
         return templates.TemplateResponse(
             "students_simple.html",
-            {"request": request, "user": user}
+            {"request": request, "user": user, "students": students}
         )
-    except JWTError:
-        return RedirectResponse(url="/")
+    except Exception as e:
+        logger.error(f"Ошибка загрузки страницы учеников: {e}")
+        return RedirectResponse(url="/dashboard")
 
 @router.get("/mastery", response_class=HTMLResponse)
 async def mastery_table_page(
@@ -61,40 +60,34 @@ async def mastery_table_page(
     token: str = None,
     db: Session = Depends(get_db)
 ):
-    """Страница с таблицей освоения навыков"""
-    # Проверяем токен
-    if token:
-        access_token = token
-    else:
-        auth_header = request.headers.get("authorization", "")
-        if auth_header.startswith("Bearer "):
-            access_token = auth_header.replace("Bearer ", "")
-        else:
-            access_token = request.cookies.get("access_token")
-    
-    if not access_token:
-        return RedirectResponse(url="/")
-    
     try:
-        # Проверяем токен
+        if token:
+            access_token = token
+        else:
+            auth_header = request.headers.get("authorization", "")
+            if auth_header.startswith("Bearer "):
+                access_token = auth_header.replace("Bearer ", "")
+            else:
+                access_token = request.cookies.get("access_token")
+        
+        if not access_token:
+            return RedirectResponse(url="/")
+        
         payload = jwt.decode(access_token, SECRET_KEY, algorithms=[ALGORITHM])
         username = payload.get("sub")
         
         if not username:
             return RedirectResponse(url="/")
         
-        # Получаем пользователя
         user = db.query(User).filter(User.username == username).first()
         if not user:
             return RedirectResponse(url="/")
         
-        # Получаем данные для таблицы освоения
         bkt = BKTEngine(db)
         students, skills, matrix = bkt.get_mastery_table()
         
-        # Отдаем шаблон
         return templates.TemplateResponse(
-            "mastery_simple.html",  # Создадим этот шаблон
+            "mastery_simple.html",
             {
                 "request": request,
                 "students": students,
@@ -103,16 +96,15 @@ async def mastery_table_page(
                 "user": user
             }
         )
-    except JWTError:
-        return RedirectResponse(url="/")
+    except Exception as e:
+        logger.error(f"Ошибка загрузки таблицы освоения: {e}")
+        return RedirectResponse(url="/dashboard")
 
 @router.get("/api/mastery")
 async def get_mastery_data(
     request: Request,
     db: Session = Depends(get_db)
 ):
-    """API для получения данных таблицы освоения"""
-    # Проверяем токен из заголовка
     auth_header = request.headers.get("authorization", "")
     if not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -133,8 +125,9 @@ async def get_mastery_data(
             "skills": skills,
             "matrix": matrix
         }
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        logger.error(f"Ошибка получения данных освоения: {e}")
+        raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
 
 @router.post("/api", response_model=StudentResponse)
 def create_student(
@@ -142,8 +135,6 @@ def create_student(
     request: Request,
     db: Session = Depends(get_db)
 ):
-    """Создание нового ученика"""
-    # Проверяем токен
     auth_header = request.headers.get("authorization", "")
     if not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -154,12 +145,10 @@ def create_student(
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username = payload.get("sub")
         
-        # Получаем пользователя
         current_user = db.query(User).filter(User.username == username).first()
         if not current_user:
             raise HTTPException(status_code=401, detail="User not found")
         
-        # Проверяем права
         if current_user.role == "guest":
             raise HTTPException(status_code=403, detail="Guests cannot create students")
         
@@ -172,17 +161,21 @@ def create_student(
         db.commit()
         db.refresh(db_student)
         
+        logger.info(f"Ученик создан: {student.name}")
         return db_student
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        
+    except Exception as e:
+        logger.error(f"Ошибка создания ученика: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Ошибка при создании ученика")
 
 @router.get("/api", response_model=List[StudentResponse])
 def get_students(
     request: Request,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500)
 ):
-    """Получение списка всех учеников"""
-    # Проверяем токен
     auth_header = request.headers.get("authorization", "")
     if not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -195,10 +188,11 @@ def get_students(
         if not username:
             raise HTTPException(status_code=401, detail="Invalid token")
         
-        students = db.query(Student).all()
+        students = db.query(Student).order_by(Student.name).offset(skip).limit(limit).all()
         return students
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        logger.error(f"Ошибка получения списка учеников: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка при получении данных")
 
 @router.delete("/api/{student_id}")
 def delete_student(
@@ -206,8 +200,6 @@ def delete_student(
     request: Request,
     db: Session = Depends(get_db)
 ):
-    """Удаление ученика"""
-    # Проверяем токен
     auth_header = request.headers.get("authorization", "")
     if not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -218,7 +210,6 @@ def delete_student(
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username = payload.get("sub")
         
-        # Получаем пользователя
         current_user = db.query(User).filter(User.username == username).first()
         if not current_user:
             raise HTTPException(status_code=401, detail="User not found")
@@ -228,11 +219,15 @@ def delete_student(
         
         student = db.query(Student).filter(Student.id == student_id).first()
         if not student:
-            raise HTTPException(status_code=404, detail="Student not found")
+            raise HTTPException(status_code=404, detail="Ученик не найден")
         
         db.delete(student)
         db.commit()
         
-        return {"message": "Student deleted successfully"}
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        logger.info(f"Ученик удален: ID {student_id}")
+        return {"message": "Ученик успешно удален"}
+        
+    except Exception as e:
+        logger.error(f"Ошибка удаления ученика {student_id}: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Ошибка при удалении ученика")

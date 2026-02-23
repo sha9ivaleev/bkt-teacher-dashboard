@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from datetime import datetime, date
 from typing import Optional, List, Dict, Any
 
@@ -9,10 +9,6 @@ class UserBase(BaseModel):
     role: str = "teacher"
 
 class UserCreate(UserBase):
-    password: str
-
-class UserLogin(BaseModel):
-    username: str
     password: str
 
 class UserResponse(UserBase):
@@ -68,23 +64,14 @@ class TestItemInput(BaseModel):
     skill_id: int
 
 class TestCreate(BaseModel):
-    test_date: date
     description: Optional[str] = None
-    items: List[TestItemInput]
+    items: List[int]
 
 class TestResultInput(BaseModel):
     test_id: int
-    results: Dict[str, Dict[str, bool]]  # {student_id: {item_index: is_correct}}
+    results: Dict[str, Dict[str, bool]]
 
-# Схемы для отображения таблицы освоения
-class MasteryCell(BaseModel):
-    student_id: int
-    student_name: str
-    skill_id: int
-    skill_name: str
-    mastery_percentage: float
-    attempts: int
-
+# Схемы для таблицы освоения
 class MasteryTableResponse(BaseModel):
     students: List[Dict[str, Any]]
     skills: List[Dict[str, Any]]
